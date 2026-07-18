@@ -836,19 +836,24 @@ def try_action(msg: str):
     return None
 
 
-CORS_ORIGIN = "http://localhost:8080"  # dashboard.html's static server
-
-
+# CORS: this server only ever runs on localhost for the user's own dashboard,
+# so we reflect whatever Origin the browser actually sent (including "null"
+# for a file:// page, e.g. a copy opened straight from Downloads) instead of
+# hardcoding one value — a hardcoded origin silently breaks any other
+# origin's preflight, with no visible error beyond a small chat-log message.
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+    def _cors_origin(self):
+        return self.headers.get("Origin") or "*"
 
     def _send(self, code, body, ctype="application/json"):
         data = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.end_headers()
         try:
             self.wfile.write(data)
@@ -857,7 +862,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Content-Length", "0")
