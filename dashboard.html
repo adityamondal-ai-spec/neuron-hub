@@ -204,7 +204,7 @@ const demoNodes=[
   {id:'github',label:'GitHub',kind:'src'},
   {id:'logs',label:'logs/',kind:'voice_log'},
 ];
-let nodes=demoNodes,hub='brain';
+let nodes=demoNodes,hub='brain',liveIndex=false;
 
 /* ================= TOAST ================= */
 let toastTimer=null;
@@ -311,11 +311,13 @@ async function loadAll(){
   try{ recs=await (await fetch('recommendations.json')).json(); }catch(e){}
 
   if(idx && Object.keys(idx.nodes||{}).length){
-    nodes=[{id:'brain',label:'Second Brain',kind:'idea'},
-           ...Object.values(idx.nodes).map(n=>({id:n.id,label:n.path,kind:n.kind}))];
+    liveIndex=true;
+    nodes=[{id:'brain',label:'Second Brain',kind:'idea',links:[]},
+           ...Object.values(idx.nodes).map(n=>({id:n.id,label:n.path,kind:n.kind,links:n.links||[]}))];
     document.getElementById('updated').textContent='Updated '+(idx.updated||'');
     document.getElementById('s-src').textContent='live';
   }else{
+    liveIndex=false;
     document.getElementById('s-src').textContent='demo';
     document.getElementById('s-srclabel').textContent='index (serve via watcher --serve)';
   }
@@ -433,9 +435,25 @@ function buildGraph(){
     n.pos=new THREE.Vector3(r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi)*0.7,r*Math.sin(phi)*Math.sin(theta));
   });
   const edges=[];
-  nodes.forEach(n=>{if(n.id!==hub)edges.push([nodes.find(x=>x.id===hub),n]);});
-  for(let i=1;i<nodes.length-1;i++)
-    if(nodes[i].kind===nodes[i+1].kind)edges.push([nodes[i],nodes[i+1]]);
+  if(liveIndex){
+    // Real edges: watcher.py's per-note "links" array, resolved from that
+    // note's actual [[wikilinks]] / markdown links — same source as
+    // neuron_hub_3d.html. No fabricated hub-star or same-kind connections.
+    const byId={};nodes.forEach(n=>byId[n.id]=n);
+    const seen=new Set();
+    nodes.forEach(n=>(n.links||[]).forEach(t=>{
+      const target=byId[t];
+      if(!target||target===n)return;
+      const key=n.id<target.id?n.id+'|'+target.id:target.id+'|'+n.id;
+      if(seen.has(key))return;seen.add(key);
+      edges.push([n,target]);
+    }));
+  }else{
+    // Demo placeholder only (no real index yet) — fabricated star + same-kind chain.
+    nodes.forEach(n=>{if(n.id!==hub)edges.push([nodes.find(x=>x.id===hub),n]);});
+    for(let i=1;i<nodes.length-1;i++)
+      if(nodes[i].kind===nodes[i+1].kind)edges.push([nodes[i],nodes[i+1]]);
+  }
   const epos=[];
   edges.forEach(([a,b])=>epos.push(a.pos.x,a.pos.y,a.pos.z,b.pos.x,b.pos.y,b.pos.z));
   const eg=new THREE.BufferGeometry();
