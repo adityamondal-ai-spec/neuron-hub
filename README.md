@@ -23,7 +23,7 @@ vault (Obsidian, all markdown)
 
 ## Setup
 ```bash
-pip3 install watchdog requests
+pip3 install watchdog requests yt-dlp   # yt-dlp: resolves a real video id for "play <song>"
 # Optional local model:
 ollama pull qwen2.5:3b
 ollama pull moondream   # for screen/image chat
@@ -46,8 +46,17 @@ secrets). Copy `CLAUDE.md` into your own vault root and fill in `PROFILE.md`
 specifics.
 
 ## Honest state
-- `brain_chat.py` — code is complete and was manually tested; not run as a
-  long-lived service.
+- `brain_chat.py` — tested live end-to-end, not just read: `/api/chat`'s
+  action layer (play/open/search) was verified to actually open real browser
+  tabs (checked via AppleScript against the live Chrome process), not just
+  assumed from the reply text. "play X" resolves a real video id via yt-dlp
+  and opens it directly (`?v=<id>&autoplay=1`); if yt-dlp can't resolve one,
+  it falls back to a plain search-results page rather than guessing. The
+  refusal for unsupported actions (send/email/call/etc.) is hardcoded, not
+  left to the LLM — a small local model was observed saying "Sure thing!" to
+  a fake email-send instead of refusing, so that path never reaches the LLM
+  at all. Occasionally the very first action right after a fresh restart
+  doesn't open a tab (`open` timing quirk); every retry after that works.
 - `watcher.py` — works; by design it does **not** do TTS, screenshots, or run
   a network listener (see its own docstring).
 - `find_leads.py` / `morning_run.sh` — functional; not on a schedule (no cron/

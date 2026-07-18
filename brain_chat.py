@@ -768,6 +768,26 @@ def _open_url(url: str) -> bool:
         return False
 
 
+_YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _resolve_youtube_id(query: str):
+    """Use yt-dlp to actually pick the top search result, so 'play X' opens
+    that video playing rather than just a search-results page. Returns None
+    (falls back to the search page) if yt-dlp is missing, times out, or
+    returns something that doesn't look like a real video id."""
+    try:
+        r = subprocess.run(
+            ["yt-dlp", "--no-warnings", "--print", "%(id)s", "--playlist-items", "1",
+             f"ytsearch1:{query}"],
+            capture_output=True, text=True, timeout=15,
+        )
+        vid = (r.stdout or "").strip().splitlines()[0] if r.stdout.strip() else ""
+        return vid if _YT_ID_RE.fullmatch(vid) else None
+    except Exception:
+        return None
+
+
 def try_action(msg: str):
     """Whitelist-only intent check, run BEFORE the message reaches the LLM.
     Returns a reply dict if an action was executed, else None (falls through
@@ -777,10 +797,18 @@ def try_action(msg: str):
     m = PLAY_RE.match(msg)
     if m:
         query = m.group(1).strip()
-        url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
+        vid = _resolve_youtube_id(query)
+        if vid:
+            url = f"https://www.youtube.com/watch?v={vid}&autoplay=1"
+        else:
+            url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
         if _open_url(url):
-            _log_action(f'ACTION: opened YouTube search for "{query}"')
-            return {"reply": f"YouTube khol diya: {query} 🎵", "action": "youtube_search"}
+            if vid:
+                _log_action(f'ACTION: played YouTube video for "{query}" ({vid})')
+                return {"reply": f"YouTube pe bajwa diya: {query} 🎵", "action": "youtube_play"}
+            _log_action(f'ACTION: opened YouTube search for "{query}" (could not auto-pick a video)')
+            return {"reply": f"YouTube search khol diya: {query} — video select nahi kar paaya, khud choose karo 🎵",
+                    "action": "youtube_search"}
         return None
 
     m = OPEN_RE.match(msg)
