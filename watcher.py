@@ -18,7 +18,7 @@ Nightly:  python3 watcher.py "<folder>" --scan
 To view the dashboard with this data, open dashboard.html through any static
 server you trust and control, e.g.:  python3 -m http.server 8080
 """
-import json, sys, time, hashlib
+import json, re, sys, time, hashlib
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +41,19 @@ KIND_FOCUS = {"code": "deployment", "doc": "research",
               "voice_log": "capture", "screen_log": "capture"}
 RECENT_WINDOW_SEC = 3600
 RECENT_MAX = 100
+
+WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)")
+MDLINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+
+
+def extract_link_targets(text: str) -> list:
+    """Raw, unresolved link target strings from [[wikilinks]] and [markdown](links)."""
+    targets = [m.group(1).strip() for m in WIKILINK_RE.finditer(text)]
+    for m in MDLINK_RE.finditer(text):
+        t = m.group(1).strip()
+        if t and not t.startswith(("http://", "https://", "mailto:")):
+            targets.append(t)
+    return targets
 
 
 def now() -> str:
@@ -105,13 +118,46 @@ class BrainIndex:
         rel = str(path.relative_to(self.root))
         fid = file_id(path)
         kind = classify_kind(path)
-        self.data["nodes"][fid] = {
+        node = {
             "id": fid, "path": rel, "kind": kind, "event": event,
             "size": path.stat().st_size if path.exists() else 0,
             "modified": now(),
         }
+        if path.suffix == ".md" and path.exists():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+                node["link_targets"] = extract_link_targets(text)
+            except Exception:
+                node["link_targets"] = []
+        self.data["nodes"][fid] = node
         self._record(path, kind, event)
         self.save(f"{event.upper()}: `{rel}` ({kind}, {fid})")
+
+    def _resolve_links(self):
+        """Turn each node's raw link_targets into a "links" array of target
+        note ids, matching by note stem/relative-path (case-insensitive).
+        Unresolved targets (typos, notes outside the vault) are dropped
+        rather than guessed at."""
+        name_map = {}
+        for fid, n in self.data["nodes"].items():
+            if n["path"].endswith(".md"):
+                stem = Path(n["path"]).stem.lower()
+                name_map.setdefault(stem, fid)
+                name_map.setdefault(n["path"][:-3].lower(), fid)
+        for fid, n in self.data["nodes"].items():
+            raw = n.get("link_targets")
+            if raw is None:
+                continue
+            resolved, seen = [], set()
+            for t in raw:
+                key = t.lstrip("./").split("#", 1)[0]
+                if key.lower().endswith(".md"):
+                    key = key[:-3]
+                target_id = name_map.get(key.lower()) or name_map.get(Path(key).name.lower())
+                if target_id and target_id != fid and target_id not in seen:
+                    seen.add(target_id)
+                    resolved.append(target_id)
+            n["links"] = resolved
 
     def remove(self, path: Path):
         fid = file_id(path)
@@ -119,6 +165,7 @@ class BrainIndex:
             self.save(f"DELETED: `{path.name}` ({fid})")
 
     def save(self, log_line: str):
+        self._resolve_links()
         self.data["updated"] = now()
         self.index_path.write_text(json.dumps(self.data, indent=2))
         if self.memory_path.exists():

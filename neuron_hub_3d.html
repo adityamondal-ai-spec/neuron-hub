@@ -154,12 +154,13 @@ function adapt(raw){
   let N=[],L=[];
   if(raw && raw.nodes && typeof raw.nodes==='object' && !Array.isArray(raw.nodes)){
     // watcher.py's real shape: nodes is an OBJECT keyed by id (e.g. "SRC-xxx"),
-    // each value = {id, path, kind, event, size, modified}. No links/edges exist
-    // yet (watcher.py doesn't track relationships) — leave L empty rather than
-    // fabricate connections.
+    // each value = {id, path, kind, event, size, modified, links?}. "links" is
+    // an array of target node ids resolved from [[wikilinks]] / markdown links
+    // found in that note (watcher.py's extract_link_targets + _resolve_links).
     N=Object.values(raw.nodes).map(n=>({id:String(n.id),
       label:String(n.path||n.id).split('/').pop(),
       group:(n.kind||groupOf(n.path||n.id)),size:1+((n.size||0)/50000),meta:n}));
+    Object.values(raw.nodes).forEach(n=>(n.links||[]).forEach(t=>L.push({s:String(n.id),t:String(t)})));
   }else if(raw && Array.isArray(raw.nodes)){
     N=raw.nodes.map((n,i)=>({id:String(n.id??n.path??n.label??i),label:n.label??n.title??String(n.id??i).split('/').pop(),
       group:(n.type||n.group||groupOf(n.path||n.id)),size:n.size||n.weight||1,meta:n}));
