@@ -152,26 +152,34 @@ def vault_context() -> str:
 
 
 def system_prompt() -> str:
-    base = ("You are HAMI, the user's personal AI and Second Brain. "
-            "Talk like a sharp, warm friend — natural and human, NOT a corporate assistant. "
-            "Be concise and real, with personality and warmth. No stiff filler "
-            "('I'd be happy to assist', 'How else may I help'). The user often writes "
-            "Hinglish — match that casual mix. "
-            "Be PROACTIVE: you know who they are (ABOUT ME), you track their pending work "
-            "(MY TASKS), and you push them toward their goals. When they ask what to do, "
-            "prioritise from their tasks + goals and give ONE clear next action. "
-            "If you don't know something, say so plainly. "
-            "You can ONLY do actions the action layer executed (opening YouTube/a site/a "
-            "search — nothing else). If the user asks for anything you cannot actually "
-            "perform, say honestly 'yeh main abhi nahi kar sakta' — NEVER claim or roleplay "
-            "that you performed an action you didn't.")
+    """Built dynamically at startup (well, per-request — cheap enough) from
+    PROFILE.md + TASKS.md so HAMI's persona always reflects the current
+    vault, not a snapshot baked in at some earlier point."""
+    base = ("You are HAMI, Aditya's personal AI. Speak Hinglish (Hindi in Latin script "
+            "mixed with English) casually like a close friend. Call him Boss. Use emojis "
+            "naturally. Be warm but brutally honest — never flatter, never fabricate numbers "
+            "or percentages, never claim abilities or actions you don't have. If asked "
+            "something outside your action whitelist, say 'yeh abhi mere bas ke bahar hai "
+            "Boss' honestly. Push back when he procrastinates on his client demo, internship "
+            "emails, or studies. "
+            "You can ONLY do actions the action layer actually executed (opening YouTube/a "
+            "site/a search — nothing else) — never roleplay or claim you did something you "
+            "didn't. "
+            "EVERY reply must be in Hinglish — at least half your words should be common Hindi "
+            "words spelled in Latin script (tu, hai, kya, kar, bata, abhi, nahi, karo, chal, "
+            "yaar, sahi, thik), NOT plain English with just 'Boss' added. Address him as Boss. "
+            "Example of your voice — Aditya: 'kaise ho' → You: 'Sab badhiya Boss 😄 tu bata, "
+            "client demo ki practice ho gayi ya abhi bhi taal raha hai?' "
+            "Example — Aditya: 'kitna jaante ho mere baare mein' → You: 'Bahut kuch Boss — tu "
+            "<university> se AI/ML kar raha hai, <home city> ka hai, apne client project pe kaam kar "
+            "raha hai. Number ya % kabhi nahi banaunga, jo pata hai wahi bolta hoon.'")
     parts = [base]
     prof = _read_personal("PROFILE.md")
     if prof:
-        parts.append("[ABOUT ME — who the user is + their goals]\n" + prof)
+        parts.append("[ABOUT ME — who Aditya is + his goals, full PROFILE.md]\n" + prof)
     tasks = _read_personal("TASKS.md")
     if tasks:
-        parts.append("[MY TASKS — the user's pending work; track it, remind, and push]\n" + tasks)
+        parts.append("[MY TASKS — Aditya's pending work; track it, remind, and push]\n" + tasks)
     ctx = vault_context()
     if ctx:
         parts.append(ctx)
@@ -732,9 +740,27 @@ _DOMAIN_RE = re.compile(
     r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}"
     r"(/[a-zA-Z0-9._~\-/%]*)?$", re.I)
 
-PLAY_RE   = re.compile(r"^(?:play|youtube|chalao|lagao)\b[:\-]?\s+(.+)$", re.I)
-OPEN_RE   = re.compile(r"^(?:open|kholo)\b[:\-]?\s+(\S+)$", re.I)
-SEARCH_RE = re.compile(r"^(?:search|dhundo)\b[:\-]?\s+(.+)$", re.I)
+PLAY_VERBS   = r"(?:play|youtube|chalao|lagao|bajao)"
+OPEN_VERBS   = r"(?:open|kholo)"
+SEARCH_VERBS = r"(?:search|dhundo)"
+# Hindi is verb-last ("X phir se lagao"), English/imperative is verb-first
+# ("play X") — a purely start-anchored regex only ever caught the second
+# form. REPEAT_WORDS are optional modifiers that can sit before the verb in
+# either position ("phir se chalao X" / "X phir se lagao").
+REPEAT_WORDS = r"(?:phir se|wapas|dobara|again|repeat)"
+
+
+def _match_intent(msg: str, verbs: str):
+    """Return the extracted query/site for an intent, checking both
+    verb-first ("chalao X") and verb-last ("X lagao") word order, with an
+    optional repeat-word modifier. None if it doesn't match at all."""
+    m = re.match(rf"^(?:{REPEAT_WORDS}\s+)?{verbs}\b[:\-]?\s+(.+)$", msg, re.I)
+    if m:
+        return m.group(1).strip()
+    m = re.match(rf"^(.+?)\s+(?:{REPEAT_WORDS}\s+)?{verbs}[.!]?$", msg, re.I)
+    if m:
+        return m.group(1).strip()
+    return None
 
 # Action-shaped requests we deliberately do NOT support. Matched and refused
 # HERE, deterministically — never handed to the LLM, because a small local
@@ -744,7 +770,7 @@ UNSUPPORTED_RE = re.compile(
     r"^(?:send|email|mail|message|whatsapp|dm|call|phone|ring|post|tweet|"
     r"book|order|buy|pay|transfer|delete|remove|reply|bhejo|bhej do|"
     r"karo call|call karo)\b", re.I)
-HONEST_REFUSAL = "yeh main abhi nahi kar sakta — abhi sirf YouTube khol sakta hoon, koi site khol sakta hoon, ya web search kar sakta hoon."
+HONEST_REFUSAL = "yeh abhi mere bas ke bahar hai Boss — abhi sirf YouTube khol sakta hoon, koi site khol sakta hoon, ya web search kar sakta hoon 🙏"
 
 
 def _log_action(line: str) -> None:
@@ -794,9 +820,8 @@ def try_action(msg: str):
     to the normal chat pipeline)."""
     msg = msg.strip()
 
-    m = PLAY_RE.match(msg)
-    if m:
-        query = m.group(1).strip()
+    query = _match_intent(msg, PLAY_VERBS)
+    if query:
         vid = _resolve_youtube_id(query)
         if vid:
             url = f"https://www.youtube.com/watch?v={vid}&autoplay=1"
@@ -811,9 +836,9 @@ def try_action(msg: str):
                     "action": "youtube_search"}
         return None
 
-    m = OPEN_RE.match(msg)
-    if m:
-        site = re.sub(r"^https?://", "", m.group(1).strip(), flags=re.I)
+    site_raw = _match_intent(msg, OPEN_VERBS)
+    if site_raw:
+        site = re.sub(r"^https?://", "", site_raw, flags=re.I)
         if _DOMAIN_RE.fullmatch(site):
             url = "https://" + site
             if _open_url(url):
@@ -821,9 +846,8 @@ def try_action(msg: str):
                 return {"reply": f"{site} khol diya.", "action": "open_site"}
         return None
 
-    m = SEARCH_RE.match(msg)
-    if m:
-        query = m.group(1).strip()
+    query = _match_intent(msg, SEARCH_VERBS)
+    if query:
         url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
         if _open_url(url):
             _log_action(f'ACTION: opened Google search for "{query}"')
