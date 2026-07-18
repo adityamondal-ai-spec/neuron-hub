@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Second Brain — Neural Core</title>
+<style>
+  :root{
+    --bg:#05070d; --panel:#0d121d; --border:#1c2537; --text:#dbe4f3;
+    --muted:#68779a; --accent:#5eead4; --accent2:#818cf8; --warn:#fbbf24;
+  }
+  body[data-focus="sales"]{--accent:#fbbf24; --accent2:#f59e0b}
+  body[data-focus="deployment"]{--accent:#f472b6; --accent2:#a855f7}
+  body[data-focus="research"]{--accent:#818cf8; --accent2:#60a5fa}
+  body[data-focus="capture"]{--accent:#34d399; --accent2:#5eead4}
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;display:flex;height:100vh;overflow:hidden}
+
+  aside{width:230px;background:var(--panel);border-right:1px solid var(--border);padding:20px 16px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;z-index:2}
+  .logo{font-size:16px;font-weight:700;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:9px}
+  .logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent);animation:pulse 2.4s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .nav-item{padding:8px 12px;border-radius:8px;color:var(--muted);cursor:pointer;transition:.15s;font-size:13px}
+  .nav-item:hover{background:#141b2b;color:var(--text)}
+  .nav-item.active{background:#141b2b;color:var(--accent);border-left:2px solid var(--accent)}
+  .side-stats{margin-top:14px;border-top:1px solid var(--border);padding-top:12px;font-size:12px;color:var(--muted);display:grid;gap:6px}
+  .side-stats b{color:var(--accent);font-size:15px;margin-right:6px}
+  .side-footer{margin-top:auto;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:10px}
+
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  #stage{position:relative;flex:1;min-height:0}
+  #scene{position:absolute;inset:0}
+  #hud{position:absolute;top:14px;left:20px;z-index:2;pointer-events:none}
+  #hud h1{font-size:17px;letter-spacing:.5px}
+  #hud .sub{color:var(--muted);font-size:12px}
+  #focusbadge{display:inline-block;margin-top:6px;padding:3px 12px;border:1px solid var(--accent);border-radius:99px;color:var(--accent);font-size:11px;letter-spacing:2px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  #label{position:absolute;z-index:3;background:rgba(13,18,29,.92);border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:12px;pointer-events:none;display:none;backdrop-filter:blur(4px)}
+  #label b{color:var(--accent)}
+
+  #voice{position:absolute;right:22px;bottom:76px;z-index:2;display:flex;flex-direction:column;align-items:center;gap:2px}
+  #vizwrap{position:relative;width:130px;height:110px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  #hi{font-size:52px;font-weight:200;letter-spacing:-1px;color:#eef4ff;user-select:none;
+    font-family:-apple-system,'Helvetica Neue',sans-serif;font-style:italic;
+    animation:hipulse 3.2s ease-in-out infinite;transition:transform .15s}
+  #vizwrap:hover #hi{transform:scale(1.08)}
+  @keyframes hipulse{0%,100%{opacity:.85}50%{opacity:1}}
+  #vstatus{font-size:10px;color:var(--muted)}
+
+  /* screen sync preview */
+  #screenprev{position:absolute;left:20px;bottom:76px;z-index:2;width:200px;border:1px solid var(--accent);border-radius:10px;overflow:hidden;display:none;box-shadow:0 0 24px color-mix(in srgb,var(--accent) 25%,transparent)}
+  #screenprev video{width:100%;display:block}
+  #screenprev .cap{font-size:9px;letter-spacing:1.5px;color:var(--accent);padding:3px 8px;background:rgba(13,18,29,.9)}
+
+  /* ---- Floating control dock ---- */
+  #dock{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:4;
+    display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;
+    background:rgba(13,18,29,.55);border:1px solid rgba(255,255,255,.08);
+    backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);
+    box-shadow:0 8px 32px rgba(0,0,0,.45)}
+  .dbtn{width:44px;height:44px;border-radius:50%;border:1px solid transparent;background:transparent;
+    color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;position:relative}
+  .dbtn:hover{background:rgba(255,255,255,.07);color:var(--text);transform:translateY(-2px)}
+  .dbtn.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);
+    background:color-mix(in srgb,var(--accent) 10%,transparent);box-shadow:0 0 16px color-mix(in srgb,var(--accent) 25%,transparent)}
+  .dbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .dbtn .tip{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);white-space:nowrap;
+    background:rgba(13,18,29,.95);border:1px solid var(--border);border-radius:6px;padding:4px 9px;
+    font-size:10px;letter-spacing:.5px;color:var(--text);opacity:0;pointer-events:none;transition:.15s}
+  .dbtn:hover .tip{opacity:1}
+  #dock .sep{width:1px;height:24px;background:rgba(255,255,255,.1);margin:0 4px}
+  #pipedot{width:10px;height:10px;border-radius:50%;background:#ef4444;transition:.3s;margin:0 6px}
+  #pipedot.ok{background:#22c55e;box-shadow:0 0 12px #22c55e;animation:pulse 2.4s infinite}
+  #pipelabel{font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-right:4px}
+
+  #toast{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:5;
+    background:rgba(13,18,29,.95);border:1px solid var(--border);border-radius:10px;padding:8px 16px;
+    font-size:12px;opacity:0;pointer-events:none;transition:.3s;max-width:420px;text-align:center}
+  #toast.show{opacity:1}
+
+  /* ---- Analytics deck ---- */
+  #deck{height:252px;flex-shrink:0;display:flex;gap:12px;padding:12px 16px;background:linear-gradient(transparent,rgba(13,18,29,.6));overflow-x:auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;min-width:280px;flex:1;display:flex;flex-direction:column;transition:border-color .4s, box-shadow .4s}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .card.prime{border-color:var(--accent);box-shadow:0 0 22px color-mix(in srgb,var(--accent) 12%,transparent)}
+  .card.prime h2{color:var(--accent)}
+  .tag{font-size:9px;padding:2px 8px;border-radius:99px;background:#141b2b;color:var(--muted);letter-spacing:1px}
+  .tag.demo{color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+  .tag.live{color:#34d399;border:1px solid rgba(52,211,153,.3)}
+
+  #timeline{flex:1;display:flex;align-items:flex-end;gap:3px}
+  .tcol{flex:1;display:flex;flex-direction:column-reverse;gap:1px;height:100%;cursor:pointer;border-radius:2px}
+  .tcol:hover{background:rgba(255,255,255,.04)}
+  .tseg{border-radius:2px;min-height:2px}
+  #tl-meta{font-size:11px;color:var(--muted);margin-top:8px;display:flex;justify-content:space-between}
+
+  #recs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .rec{border-left:2px solid var(--accent);background:#10182a;border-radius:0 8px 8px 0;padding:8px 11px;font-size:12px}
+  .rec b{color:var(--accent);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;display:block;margin-bottom:2px}
+  .rec .action{color:var(--muted);font-size:11px;margin-top:3px}
+  .empty{color:var(--muted);font-size:12px;line-height:1.6;margin:auto 0;text-align:center;padding:0 10px}
+
+  #fq{flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+  .fitem{display:flex;gap:9px;font-size:12px;align-items:baseline}
+  .fitem .k{color:var(--accent);min-width:78px;font-size:10px;letter-spacing:1px;text-transform:uppercase}
+  #legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-top:6px}
+  #legend span{display:flex;align-items:center;gap:4px}
+  #legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body data-focus="general">
+<aside>
+  <div class="logo"><span class="dot"></span>SECOND BRAIN</div>
+  <div class="nav-item active">◉ Neural Core</div>
+  <div class="nav-item">💡 Ideas & Projects</div>
+  <div class="nav-item">📈 Sales Optimizer</div>
+  <div class="nav-item">🗂 Data Sources</div>
+  <div class="nav-item">🔗 Synaptic Links</div>
+  <div class="nav-item">✅ Tasks</div>
+  <div class="side-stats">
+    <div><b id="s-nodes">0</b>nodes</div>
+    <div><b id="s-edges">0</b>synapses</div>
+    <div><b id="s-events">0</b>events / 30d</div>
+    <div><b id="s-src">–</b><span id="s-srclabel">index source</span></div>
+  </div>
+  <div class="side-footer">Memory: brain_memory.md<br>Index: brain_index.json<br><span id="updated"></span></div>
+</aside>
+
+<main>
+  <div id="stage">
+    <div id="scene"></div>
+    <div id="hud">
+      <h1>Neural Core</h1>
+      <div class="sub">drag to orbit · scroll to zoom · hover nodes</div>
+      <div id="focusbadge">FOCUS: GENERAL</div>
+    </div>
+    <div id="label"></div>
+
+    <div id="screenprev"><video autoplay muted playsinline></video><div class="cap">SCREEN SYNC — LOCAL PREVIEW</div></div>
+
+    <div id="voice">
+      <div id="vizwrap" title="Mic toggle">
+        <div id="hi">Hi</div>
+      </div>
+      <div id="vstatus">mic idle</div>
+    </div>
+
+    <div id="toast"></div>
+
+    <!-- ============ FLOATING CONTROL DOCK ============ -->
+    <div id="dock">
+      <button class="dbtn" id="b-mic" onclick="toggleMic()">
+        <svg id="ic-mic-on" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+        <svg id="ic-mic-off" viewBox="0 0 24 24" style="display:none"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
+        <span class="tip" id="tip-mic">Mic: off</span>
+      </button>
+      <button class="dbtn" id="b-screen" onclick="toggleScreen()">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span class="tip" id="tip-screen">Screen Sync: off</span>
+      </button>
+      <button class="dbtn" id="b-digest" onclick="forceDigest()">
+        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span class="tip">Force Digest</span>
+      </button>
+      <div class="sep"></div>
+      <span id="pipelabel">WATCHER</span>
+      <div id="pipedot" title="Local watcher server status"></div>
+    </div>
+  </div>
+
+  <div id="deck">
+    <div class="card" id="card-timeline" style="flex:1.4">
+      <h2>30-Day Activity Timeline <span class="tag" id="tl-tag">…</span></h2>
+      <div id="timeline"></div>
+      <div id="tl-meta"><span id="tl-range"></span><span id="tl-hover">hover a day</span></div>
+      <div id="legend"></div>
+    </div>
+    <div class="card" id="card-optimizer">
+      <h2>AAA Sales &amp; Conversion Optimizer <span class="tag" id="rec-tag">…</span></h2>
+      <div id="recs"></div>
+    </div>
+    <div class="card" id="card-focus">
+      <h2>Current Focus <span class="tag live" id="focus-tag">watcher</span></h2>
+      <div id="fq"></div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ================= CONSTANTS ================= */
+const KIND_COLOR={idea:0x5eead4,doc:0x818cf8,code:0xf472b6,src:0xfbbf24,voice_log:0x34d399,screen_log:0x60a5fa};
+const KIND_CSS={doc:'#818cf8',code:'#f472b6',voice_log:'#34d399',screen_log:'#60a5fa',idea:'#5eead4',src:'#fbbf24'};
+const FOCUS_LABEL={general:'GENERAL',sales:'SALES LEADS',deployment:'CODE DEPLOYMENT',research:'RESEARCH',capture:'CAPTURE'};
+const FOCUS_PRIME={sales:'card-optimizer',deployment:'card-focus',research:'card-timeline',capture:'card-timeline',general:null};
+
+const demoNodes=[
+  {id:'brain',label:'Second Brain',kind:'idea'},
+  {id:'memory',label:'brain_memory.md',kind:'doc'},
+  {id:'dash',label:'dashboard.html',kind:'code'},
+  {id:'watch',label:'watcher.py',kind:'code'},
+  {id:'gmail',label:'Gmail/Calendar',kind:'src'},
+  {id:'slack',label:'Slack',kind:'src'},
+  {id:'github',label:'GitHub',kind:'src'},
+  {id:'logs',label:'logs/',kind:'voice_log'},
+];
+let nodes=demoNodes,hub='brain';
+
+/* ================= TOAST ================= */
+let toastTimer=null;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+/* ================= LOCAL API (watcher.py --serve) ================= */
+async function postControl(changes){
+  try{
+    const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(changes)});
+    if(!r.ok)throw new Error(r.status);
+    setPipe(true);
+    return await r.json();
+  }catch(e){
+    setPipe(false);
+    toast('Watcher API unreachable — start it with: python3 watcher.py <folder> --serve 8080');
+    return null;
+  }
+}
+function setPipe(ok){document.getElementById('pipedot').classList.toggle('ok',!!ok);}
+async function pollState(){
+  try{
+    const r=await fetch('/api/state');
+    setPipe(r.ok);
+  }catch(e){setPipe(false);}
+}
+setInterval(pollState,5000);
+
+/* Guard: dashboard opened as a file instead of through the watcher server */
+if(location.protocol==='file:'){
+  document.getElementById('s-src').textContent='offline';
+  document.getElementById('s-srclabel').textContent='opened via file:// — no data';
+  setTimeout(()=>toast('This page was opened as a file. Start the watcher with --serve 8080 and open http://localhost:8080/dashboard.html'),800);
+}
+
+/* ================= DOCK: MIC ================= */
+let micStream=null,micOn=false;
+async function startMicIfNeeded(){
+  if(micStream)return true;
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    analyser=new AnalyserNode(ctx,{fftSize:128});
+    ctx.createMediaStreamSource(micStream).connect(analyser);
+    freq=new Uint8Array(analyser.frequencyBinCount);
+    return true;
+  }catch(e){toast('Microphone permission denied');return false;}
+}
+async function toggleMic(){
+  if(!await startMicIfNeeded())return;
+  micOn=!micOn;
+  micStream.getAudioTracks().forEach(t=>t.enabled=micOn);
+  document.getElementById('b-mic').classList.toggle('on',micOn);
+  document.getElementById('ic-mic-on').style.display=micOn?'':'none';
+  document.getElementById('ic-mic-off').style.display=micOn?'none':'';
+  document.getElementById('tip-mic').textContent='Mic: '+(micOn?'active':'muted');
+  document.getElementById('vstatus').textContent=micOn?'mic live':'mic muted';
+  postControl({mic:micOn});
+}
+document.getElementById('vizwrap').addEventListener('click',toggleMic);
+
+/* ================= DOCK: SCREEN SYNC ================= */
+let screenStream=null,screenOn=false;
+async function toggleScreen(){
+  if(!screenOn){
+    try{
+      screenStream=await navigator.mediaDevices.getDisplayMedia({video:true});
+    }catch(e){toast('Screen share cancelled');return;}
+    screenOn=true;
+    const prev=document.getElementById('screenprev');
+    prev.style.display='block';
+    prev.querySelector('video').srcObject=screenStream;
+    screenStream.getVideoTracks()[0].addEventListener('ended',()=>toggleScreen());
+    document.getElementById('b-screen').classList.add('on');
+    document.getElementById('tip-screen').textContent='Screen Sync: live';
+    const r=await postControl({screen_sync:true});
+    if(r)toast('Screen sync on — watcher captured a snapshot into logs/');
+  }else{
+    screenOn=false;
+    if(screenStream)screenStream.getTracks().forEach(t=>t.stop());
+    screenStream=null;
+    document.getElementById('screenprev').style.display='none';
+    document.getElementById('b-screen').classList.remove('on');
+    document.getElementById('tip-screen').textContent='Screen Sync: off';
+    postControl({screen_sync:false});
+  }
+}
+
+/* ================= DOCK: FORCE DIGEST ================= */
+async function forceDigest(){
+  const b=document.getElementById('b-digest');
+  b.classList.add('on');setTimeout(()=>b.classList.remove('on'),1200);
+  const r=await postControl({force_digest:true});
+  if(r)toast('Digest request logged. To run it now: Claude sidebar → Scheduled → morning-brain-digest → Run now');
+}
+
+/* ================= DATA LOAD ================= */
+async function loadAll(){
+  let idx=null,recs=null;
+  try{ idx=await (await fetch('brain_index.json')).json(); }catch(e){}
+  try{ recs=await (await fetch('recommendations.json')).json(); }catch(e){}
+
+  if(idx && Object.keys(idx.nodes||{}).length){
+    nodes=[{id:'brain',label:'Second Brain',kind:'idea'},
+           ...Object.values(idx.nodes).map(n=>({id:n.id,label:n.path,kind:n.kind}))];
+    document.getElementById('updated').textContent='Updated '+(idx.updated||'');
+    document.getElementById('s-src').textContent='live';
+  }else{
+    document.getElementById('s-src').textContent='demo';
+    document.getElementById('s-srclabel').textContent='index (serve via watcher --serve)';
+  }
+  buildGraph();
+  applyFocus((idx&&idx.focus)||'general', idx);
+  renderTimeline(idx&&idx.activity?idx.activity:null);
+  renderRecs(recs);
+}
+setInterval(loadAll,60000);
+
+/* ================= FOCUS ADAPTATION ================= */
+function applyFocus(focus, idx){
+  document.body.dataset.focus=focus;
+  document.getElementById('focusbadge').textContent='FOCUS: '+(FOCUS_LABEL[focus]||focus.toUpperCase());
+  document.querySelectorAll('.card').forEach(c=>{c.classList.remove('prime');c.style.order=0;});
+  const prime=FOCUS_PRIME[focus];
+  if(prime){const el=document.getElementById(prime);el.classList.add('prime');el.style.order=-1;}
+  const fq=document.getElementById('fq');
+  const recent=(idx&&idx.recent)?idx.recent.slice(-6).reverse():[];
+  fq.innerHTML='';
+  const mk=(k,v)=>{const d=document.createElement('div');d.className='fitem';d.innerHTML='<span class="k">'+k+'</span><span>'+v+'</span>';fq.appendChild(d);};
+  mk('mode',FOCUS_LABEL[focus]||focus);
+  if(recent.length){
+    recent.forEach(e=>mk(e.event||'event',e.kind+' · '+new Date(e.ts*1000).toLocaleTimeString()));
+  }else{
+    mk('status','no watcher events yet — start watcher.py and edit a file');
+  }
+}
+
+/* ================= 30-DAY TIMELINE ================= */
+function last30(){const out=[];const d=new Date();for(let i=29;i>=0;i--){const x=new Date(d);x.setDate(d.getDate()-i);out.push(x.toLocaleDateString('en-CA'));}return out;} // local dates, not UTC — keeps "today" in the window for UTC+ timezones
+function renderTimeline(activity){
+  const days=last30();
+  const isDemo=!activity;
+  if(isDemo){
+    activity={};
+    days.forEach((d,i)=>{activity[d]={doc:1+Math.floor(3*Math.abs(Math.sin(i))),code:Math.floor(4*Math.abs(Math.cos(i*0.7))),voice_log:i%5===0?1:0};});
+  }
+  document.getElementById('tl-tag').textContent=isDemo?'demo':'live';
+  document.getElementById('tl-tag').className='tag '+(isDemo?'demo':'live');
+  const tl=document.getElementById('timeline');tl.innerHTML='';
+  const kinds=['doc','code','voice_log','screen_log'];
+  const max=Math.max(1,...days.map(d=>kinds.reduce((a,k)=>a+((activity[d]||{})[k]||0),0)));
+  let total=0;
+  days.forEach(d=>{
+    const col=document.createElement('div');col.className='tcol';
+    let dayTotal=0;
+    kinds.forEach(k=>{
+      const v=(activity[d]||{})[k]||0;if(!v)return;
+      dayTotal+=v;
+      const seg=document.createElement('div');seg.className='tseg';
+      seg.style.height=(v/max*100)+'%';seg.style.background=KIND_CSS[k];seg.style.opacity='0.85';
+      col.appendChild(seg);
+    });
+    total+=dayTotal;
+    col.addEventListener('mouseenter',()=>document.getElementById('tl-hover').textContent=d+' — '+dayTotal+' events');
+    tl.appendChild(col);
+  });
+  document.getElementById('tl-range').textContent=days[0]+' → '+days[29];
+  document.getElementById('s-events').textContent=isDemo?'0':total;
+  const lg=document.getElementById('legend');lg.innerHTML='';
+  kinds.forEach(k=>{const s=document.createElement('span');s.innerHTML='<i style="background:'+KIND_CSS[k]+'"></i>'+k.replace('_',' ');lg.appendChild(s);});
+}
+
+/* ================= OPTIMIZER ================= */
+function renderRecs(recs){
+  const box=document.getElementById('recs');box.innerHTML='';
+  const tag=document.getElementById('rec-tag');
+  if(recs && Array.isArray(recs.recommendations) && recs.recommendations.length){
+    tag.textContent=recs.date||'live';tag.className='tag live';
+    recs.recommendations.slice(0,4).forEach(r=>{
+      const d=document.createElement('div');d.className='rec';
+      d.innerHTML='<b>'+(r.area||'insight')+'</b>'+(r.insight||'')+
+        (r.action?'<div class="action">→ '+r.action+'</div>':'');
+      box.appendChild(d);
+    });
+  }else{
+    tag.textContent='awaiting digest';tag.className='tag demo';
+    box.innerHTML='<div class="empty">No recommendations yet.<br>The 7 AM digest analyzes your completed tasks and file activity, then writes <b>recommendations.json</b> here.<br><br>Tip: use ⚡ Force Digest in the dock, then "Run now" in Claude\'s Scheduled sidebar.</div>';
+  }
+}
+
+/* ================= THREE.JS SCENE ================= */
+const container=document.getElementById('scene');
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x05070d,0.028);
+const camera=new THREE.PerspectiveCamera(55,1,0.1,200);
+camera.position.set(0,4,22);
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+container.appendChild(renderer.domElement);
+function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);
+
+function glowTexture(hex){
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const g=c.getContext('2d'),col='#'+hex.toString(16).padStart(6,'0');
+  const gr=g.createRadialGradient(64,64,0,64,64,64);
+  gr.addColorStop(0,col);gr.addColorStop(0.25,col+'aa');gr.addColorStop(1,'transparent');
+  g.fillStyle=gr;g.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+const texCache={};const glow=h=>texCache[h]||(texCache[h]=glowTexture(h));
+const group=new THREE.Group();scene.add(group);
+let nodeMeshes=[],coreMesh=null;
+
+function buildGraph(){
+  while(group.children.length)group.remove(group.children[0]);
+  nodeMeshes=[];
+  const N=nodes.length;
+  nodes.forEach((n,i)=>{
+    if(n.id===hub){n.pos=new THREE.Vector3(0,0,0);return;}
+    const k=i+0.5,phi=Math.acos(1-2*k/N),theta=Math.PI*(1+Math.sqrt(5))*k;
+    const r=8+Math.random()*3;
+    n.pos=new THREE.Vector3(r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi)*0.7,r*Math.sin(phi)*Math.sin(theta));
+  });
+  const edges=[];
+  nodes.forEach(n=>{if(n.id!==hub)edges.push([nodes.find(x=>x.id===hub),n]);});
+  for(let i=1;i<nodes.length-1;i++)
+    if(nodes[i].kind===nodes[i+1].kind)edges.push([nodes[i],nodes[i+1]]);
+  const epos=[];
+  edges.forEach(([a,b])=>epos.push(a.pos.x,a.pos.y,a.pos.z,b.pos.x,b.pos.y,b.pos.z));
+  const eg=new THREE.BufferGeometry();
+  eg.setAttribute('position',new THREE.Float32BufferAttribute(epos,3));
+  group.add(new THREE.LineSegments(eg,new THREE.LineBasicMaterial({color:0x818cf8,transparent:true,opacity:0.28})));
+  nodes.forEach(n=>{
+    const color=KIND_COLOR[n.kind]||0x818cf8,isHub=n.id===hub;
+    const sphere=new THREE.Mesh(new THREE.SphereGeometry(isHub?1.15:0.42,24,24),
+      new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.95}));
+    sphere.position.copy(n.pos);
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:glow(color),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    sprite.scale.setScalar(isHub?7:2.6);sprite.position.copy(n.pos);
+    sphere.userData=n;
+    group.add(sprite);group.add(sphere);
+    nodeMeshes.push(sphere);
+    if(isHub)coreMesh=sphere;
+  });
+  const P=350,ppos=new Float32Array(P*3);
+  for(let i=0;i<P*3;i++)ppos[i]=(Math.random()-0.5)*46;
+  const pg=new THREE.BufferGeometry();
+  pg.setAttribute('position',new THREE.BufferAttribute(ppos,3));
+  group.add(new THREE.Points(pg,new THREE.PointsMaterial({color:0x2a3550,size:0.09})));
+  document.getElementById('s-nodes').textContent=nodes.length;
+  document.getElementById('s-edges').textContent=edges.length;
+}
+
+let dragging=false,px=0,py=0,rotY=0,rotX=0.15,dist=22;
+container.addEventListener('mousedown',e=>{dragging=true;px=e.clientX;py=e.clientY});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{
+  if(dragging){rotY+=(e.clientX-px)*0.005;rotX+=(e.clientY-py)*0.005;rotX=Math.max(-1.2,Math.min(1.2,rotX));px=e.clientX;py=e.clientY;}
+  hover(e);
+});
+container.addEventListener('wheel',e=>{dist=Math.max(8,Math.min(45,dist+e.deltaY*0.02));e.preventDefault()},{passive:false});
+
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),labelEl=document.getElementById('label');
+function hover(e){
+  const r=container.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){labelEl.style.display='none';return;}
+  mouse.x=((e.clientX-r.left)/r.width)*2-1;mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hit=ray.intersectObjects(nodeMeshes)[0];
+  if(hit){
+    const n=hit.object.userData;
+    labelEl.style.display='block';
+    labelEl.style.left=(e.clientX-r.left+14)+'px';labelEl.style.top=(e.clientY-r.top+10)+'px';
+    labelEl.innerHTML='<b>'+n.label+'</b><br><span style="color:var(--muted)">'+n.kind+' · '+n.id+'</span>';
+  }else labelEl.style.display='none';
+}
+
+/* ================= VOICE CORE ("Hi" neon glow) ================= */
+let analyser=null,freq=null,audioLevel=0;
+const hiEl=document.getElementById('hi');
+function drawViz(t){
+  // audio level drives both the "Hi" glow and the 3D core pulse
+  if(analyser&&micOn){
+    analyser.getByteFrequencyData(freq);
+    audioLevel=freq.reduce((a,b)=>a+b,0)/freq.length/255;
+  }else{
+    audioLevel=0.06+0.03*Math.sin(t/900);
+  }
+  const accent=getComputedStyle(document.body).getPropertyValue('--accent').trim()||'#5eead4';
+  const g=6+audioLevel*46;  // glow radius breathes with your voice
+  hiEl.style.textShadow=
+    '0 0 '+g.toFixed(1)+'px '+accent+
+    ',0 0 '+(g*2.4).toFixed(1)+'px '+accent+
+    ',0 0 '+(g*4.5).toFixed(1)+'px color-mix(in srgb,'+accent+' 55%,transparent)';
+}
+
+/* ================= LOOP ================= */
+function animate(t){
+  requestAnimationFrame(animate);
+  group.rotation.y=rotY+t*0.00006;
+  group.rotation.x=rotX;
+  camera.position.z=dist;
+  camera.lookAt(0,0,0);
+  if(coreMesh)coreMesh.scale.setScalar(1+audioLevel*1.6+0.04*Math.sin(t/300));
+  drawViz(t);
+  renderer.render(scene,camera);
+}
+resize();loadAll();pollState();animate(0);
+</script>
+</body>
+</html>

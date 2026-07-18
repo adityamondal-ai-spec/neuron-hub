@@ -1,0 +1,5 @@
+{
+  "prefer": "local",
+  "local_model": "qwen2.5:3b",
+  "vision_model": "moondream"
+}

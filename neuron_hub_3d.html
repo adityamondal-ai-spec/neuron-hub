@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURON HUB — dimaag ka naksha</title>
+<style>
+  :root{
+    --ink:#0B0E1C; --ink2:#10152B; --ivory:#F2EFE9; --dim:#8A90A6;
+    --ultra:#4F6BFF; --coral:#FF7A59; --mint:#3ED9A4; --gold:#F5C24B; --violet:#9D7BFF;
+    --panel:rgba(16,21,43,.82); --line:rgba(242,239,233,.10);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--ink);color:var(--ivory);
+    font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+  #space{position:fixed;inset:0;display:block}
+  #vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(4,6,14,.55) 100%)}
+  .hud{position:fixed;z-index:5}
+  /* ---------- top bar ---------- */
+  #top{top:0;left:0;right:0;display:flex;align-items:center;gap:18px;padding:14px 20px;
+    background:linear-gradient(180deg,rgba(11,14,28,.92),rgba(11,14,28,0));pointer-events:none}
+  #top>*{pointer-events:auto}
+  #brand{line-height:1.1}
+  #brand h1{font-family:"Space Grotesk",system-ui,sans-serif;font-weight:700;font-size:20px;letter-spacing:.14em}
+  #brand h1 b{color:var(--ultra)}
+  #brand small{color:var(--dim);font-size:10px;letter-spacing:.22em}
+  #stats{font-size:10px;color:var(--dim);letter-spacing:.12em;border-left:1px solid var(--line);padding-left:16px}
+  #stats b{color:var(--ivory)}
+  #search{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    color:var(--ivory);font:inherit;font-size:12px;padding:9px 14px;width:min(300px,34vw);outline:none;
+    backdrop-filter:blur(8px)}
+  #search:focus{border-color:var(--ultra)}
+  #search::placeholder{color:var(--dim)}
+  /* ---------- legend ---------- */
+  #legend{top:64px;right:20px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;backdrop-filter:blur(8px);min-width:150px}
+  #legend h3{font-size:9px;letter-spacing:.24em;color:var(--dim);margin-bottom:8px}
+  .leg{display:flex;align-items:center;gap:8px;font-size:11px;padding:3px 0;cursor:pointer;user-select:none}
+  .leg .swatch{width:9px;height:9px;border-radius:50%}
+  .leg .n{margin-left:auto;color:var(--dim);font-size:10px}
+  .leg.off{opacity:.3}
+  /* ---------- inspector ---------- */
+  #inspector{top:64px;left:20px;width:262px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px;backdrop-filter:blur(8px)}
+  #inspector h3{font-size:9px;letter-spacing:.24em;color:var(--dim);margin-bottom:8px}
+  #insBody{font-size:11px;line-height:1.55;color:var(--dim)}
+  #insBody .t{font-family:"Space Grotesk",sans-serif;font-size:15px;color:var(--ivory);margin-bottom:4px;word-break:break-word}
+  #insBody .meta{font-size:10px;letter-spacing:.06em}
+  #insBody .links{margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  #insBody .lk{display:block;color:var(--ultra);cursor:pointer;padding:1px 0;word-break:break-word}
+  #insBody .lk:hover{color:var(--coral)}
+  /* ---------- neuron ring ---------- */
+  #ring{bottom:96px;right:26px;width:150px;text-align:center}
+  #ring svg{width:118px;height:118px}
+  .r-spin{transform-origin:59px 59px;animation:spin 14s linear infinite}
+  .r-spin2{transform-origin:59px 59px;animation:spin 9s linear infinite reverse}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #ring .word{font-family:"Space Grotesk",sans-serif;font-weight:700;letter-spacing:.3em;font-size:13px;margin-top:-74px;margin-bottom:52px}
+  #ring .st{font-size:9px;letter-spacing:.22em;color:var(--mint)}
+  #ring .st.err{color:var(--coral)}
+  #ring .sub{font-size:9px;color:var(--dim);letter-spacing:.14em;margin-top:3px}
+  /* ---------- chat dock ---------- */
+  #dock{bottom:0;left:0;right:0;display:flex;justify-content:center;padding:16px 20px 20px;
+    background:linear-gradient(0deg,rgba(11,14,28,.94),rgba(11,14,28,0));pointer-events:none}
+  #dockIn{pointer-events:auto;display:flex;gap:10px;width:min(680px,92vw);background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:10px 12px;backdrop-filter:blur(10px)}
+  #chatInput{flex:1;background:none;border:none;outline:none;color:var(--ivory);font:inherit;font-size:13px}
+  #chatInput::placeholder{color:var(--dim)}
+  #sendBtn{background:var(--ultra);color:var(--ivory);border:none;border-radius:8px;font:inherit;
+    font-size:11px;letter-spacing:.1em;padding:8px 16px;cursor:pointer}
+  #sendBtn:hover{background:var(--coral)}
+  #chatLog{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);width:min(680px,92vw);
+    max-height:38vh;overflow-y:auto;z-index:4;display:flex;flex-direction:column;gap:8px;padding:6px}
+  .msg{border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.55;backdrop-filter:blur(8px);white-space:pre-wrap}
+  .msg.me{align-self:flex-end;background:rgba(79,107,255,.18);border:1px solid rgba(79,107,255,.4)}
+  .msg.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line)}
+  .msg.sys{align-self:center;background:none;border:1px dashed var(--line);color:var(--dim);font-size:10px}
+  /* ---------- toast + help ---------- */
+  #toast{top:64px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--coral);
+    border-radius:8px;color:var(--ivory);font-size:11px;padding:9px 16px;backdrop-filter:blur(8px);display:none}
+  #help{bottom:20px;left:20px;font-size:9px;color:var(--dim);letter-spacing:.1em;line-height:1.8}
+  #help b{color:var(--ivory)}
+  @media (max-width:760px){#inspector{display:none}#legend{display:none}#ring{display:none}#stats{display:none}}
+  @media (prefers-reduced-motion:reduce){.r-spin,.r-spin2{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="space"></canvas>
+<div id="vignette"></div>
+
+<div class="hud" id="top">
+  <div id="brand"><h1>NEURON<b>·</b>HUB</h1><small>DIMAAG KA NAKSHA</small></div>
+  <div id="stats"><b id="nN">0</b> NOTES · <b id="nL">0</b> LINKS</div>
+  <input id="search" placeholder="brain mein khojo…  ( / )" autocomplete="off">
+</div>
+
+<div class="hud" id="inspector">
+  <h3>INSPECTOR</h3>
+  <div id="insBody">Kisi node pe click karo — woh aur uske connections jal uthenge, details yahan dikhengi.</div>
+</div>
+
+<div class="hud" id="legend"><h3>FILTER</h3><div id="legRows"></div></div>
+
+<div class="hud" id="ring">
+  <svg viewBox="0 0 118 118">
+    <circle cx="59" cy="59" r="54" fill="none" stroke="rgba(79,107,255,.25)" stroke-width="1"/>
+    <circle class="r-spin" cx="59" cy="59" r="54" fill="none" stroke="#4F6BFF" stroke-width="2"
+      stroke-dasharray="60 280" stroke-linecap="round"/>
+    <circle cx="59" cy="59" r="44" fill="none" stroke="rgba(242,239,233,.12)" stroke-width="1"/>
+    <circle class="r-spin2" cx="59" cy="59" r="44" fill="none" stroke="#FF7A59" stroke-width="1.6"
+      stroke-dasharray="30 250" stroke-linecap="round"/>
+    <circle cx="59" cy="59" r="33" fill="rgba(79,107,255,.08)" stroke="rgba(79,107,255,.35)" stroke-width="1"/>
+  </svg>
+  <div class="word">NEURON</div>
+  <div class="st" id="ringSt">BOOTING…</div>
+  <div class="sub" id="ringSub">index dhoond raha hoon</div>
+</div>
+
+<div id="chatLog"></div>
+<div class="hud" id="dock">
+  <div id="dockIn">
+    <input id="chatInput" placeholder='Poochho… ("kal kya karna hai" · "show hubs")' autocomplete="off">
+    <button id="sendBtn">BHEJO</button>
+  </div>
+</div>
+
+<div class="hud" id="toast"></div>
+<div class="hud" id="help"><b>drag</b> ghumao · <b>scroll</b> zoom · <b>click</b> focus · <b>esc</b> clear</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ================= CONFIG ================= */
+const INDEX_URL   = 'brain_index.json';           // watcher.py output (same folder)
+const CHAT_API    = 'http://localhost:8090/api/chat'; // brain_chat.py endpoint (adapt in Claude Code)
+const PALETTE     = ['#4F6BFF','#FF7A59','#3ED9A4','#F5C24B','#9D7BFF','#5FD4F5','#F26BA8','#A9B4D0'];
+/* ========================================== */
+
+const $=s=>document.querySelector(s);
+function rndDir(){const u=Math.random()*2-1,ph=Math.random()*Math.PI*2,s=Math.sqrt(1-u*u);
+  return new THREE.Vector3(s*Math.cos(ph),u,s*Math.sin(ph));}
+window.onerror=(m)=>{const el=$('#toast');if(el){el.textContent='⚠ '+m;el.style.display='block';}};
+let nodes=[], links=[], groups=new Map(), focusId=null, hover=null;
+
+/* ---------- tolerant data adapter ---------- */
+function groupOf(p){
+  if(!p) return 'notes';
+  const parts=String(p).replace(/^\.\//,'').split('/');
+  if(parts.length>1) return parts[0].toLowerCase();
+  const ext=(String(p).split('.').pop()||'').toLowerCase();
+  return ext==='md'?'notes':(ext?'files':'notes');
+}
+function adapt(raw){
+  let N=[],L=[];
+  if(raw && raw.nodes && typeof raw.nodes==='object' && !Array.isArray(raw.nodes)){
+    // watcher.py's real shape: nodes is an OBJECT keyed by id (e.g. "SRC-xxx"),
+    // each value = {id, path, kind, event, size, modified}. No links/edges exist
+    // yet (watcher.py doesn't track relationships) — leave L empty rather than
+    // fabricate connections.
+    N=Object.values(raw.nodes).map(n=>({id:String(n.id),
+      label:String(n.path||n.id).split('/').pop(),
+      group:(n.kind||groupOf(n.path||n.id)),size:1+((n.size||0)/50000),meta:n}));
+  }else if(raw && Array.isArray(raw.nodes)){
+    N=raw.nodes.map((n,i)=>({id:String(n.id??n.path??n.label??i),label:n.label??n.title??String(n.id??i).split('/').pop(),
+      group:(n.type||n.group||groupOf(n.path||n.id)),size:n.size||n.weight||1,meta:n}));
+    (raw.links||raw.edges||[]).forEach(l=>L.push({s:String(l.source??l.from??l.s),t:String(l.target??l.to??l.t)}));
+  }else if(raw && Array.isArray(raw.files)){
+    N=raw.files.map(f=>({id:String(f.path||f.name),label:String(f.path||f.name).split('/').pop().replace(/\.md$/,''),
+      group:groupOf(f.path||f.name),size:1+((f.links&&f.links.length)||0)/3,meta:f}));
+    raw.files.forEach(f=>(f.links||[]).forEach(t=>L.push({s:String(f.path||f.name),t:String(t)})));
+  }else if(raw && typeof raw==='object'){
+    // last resort: treat top-level keys as buckets of names
+    Object.entries(raw).forEach(([k,v])=>{ if(Array.isArray(v)) v.forEach(x=>N.push({id:k+'/'+x,label:String(x),group:k,size:1,meta:{bucket:k}})); });
+  }
+  const ids=new Set(N.map(n=>n.id));
+  L=L.filter(l=>ids.has(l.s)&&ids.has(l.t)&&l.s!==l.t);
+  return {N,L};
+}
+function demoData(){
+  const hubs=['CLAUDE','PROFILE','TASKS','INBOX','ProjectA','Portfolio','Leads','Skills'];
+  const N=[],L=[];
+  hubs.forEach((h,i)=>{N.push({id:h,label:h,group:['core','core','core','core','projects','projects','leads','skills'][i],size:4,meta:{demo:true}});});
+  for(let i=0;i<140;i++){const h=hubs[i%hubs.length];const id=h+'-'+i;
+    N.push({id,label:'note '+i,group:groupOf(h.toLowerCase()+'/x.md'),size:1,meta:{demo:true}});
+    L.push({s:id,t:h}); if(i%9===0)L.push({s:id,t:hubs[(i+3)%hubs.length]});}
+  return {N,L};
+}
+
+/* ---------- three.js scene ---------- */
+const canvas=$('#space');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0B0E1C);
+scene.fog=new THREE.FogExp2(0x0B0E1C,0.0016);
+const camera=new THREE.PerspectiveCamera(55,1,1,4000); camera.position.set(0,40,560);
+const world=new THREE.Group(); scene.add(world);
+scene.add(new THREE.AmbientLight(0xffffff,.9));
+const key=new THREE.PointLight(0x4F6BFF,1.1,2000); key.position.set(300,300,300); scene.add(key);
+
+/* ---------- glow texture helper ---------- */
+function glowTex(hex,inner=1){
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const x=c.getContext('2d'),g=x.createRadialGradient(64,64,2,64,64,64);
+  g.addColorStop(0,'rgba(255,255,255,'+inner+')');g.addColorStop(.25,hex+'cc');
+  g.addColorStop(.6,hex+'33');g.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle=g;x.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+/* ---------- milky way: layered dust, halo, nebulae (photo-real tuning) ---------- */
+(()=>{
+  const soft=glowTex('#ffffff',.9);
+  function dustLayer(count,size,op,thin){
+    const g=new THREE.BufferGeometry(),P=[],C=[]; const col=new THREE.Color();
+    for(let i=0;i<count;i++){
+      const arm=(Math.random()*3)|0, t=Math.pow(Math.random(),.8);
+      const r=30+t*840, ang=arm*(Math.PI*2/3)+t*4.4+(Math.random()-.5)*(.7-t*.3);
+      P.push(Math.cos(ang)*r+(Math.random()-.5)*52,(Math.random()-.5)*(thin-t*thin*.6),Math.sin(ang)*r+(Math.random()-.5)*52);
+      // color temperature: red-orange ADITYA core → white mid → blue arms
+      if(t<.22)      col.setHSL(.03+Math.random()*.05,.85,.55+Math.random()*.2);
+      else if(t<.5)  col.setHSL(.07-(t-.22)*.1,.4,.72+Math.random()*.15);
+      else           col.setHSL(.58+Math.random()*.09,.55,.55+Math.random()*.3);
+      C.push(col.r,col.g,col.b);
+    }
+    g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+    g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+    return new THREE.Points(g,new THREE.PointsMaterial({size,map:soft,vertexColors:true,transparent:true,
+      opacity:op,sizeAttenuation:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+  }
+  world.add(dustLayer(13000,2.2,.55,30)); // fine grain
+  world.add(dustLayer(3600,5,.3,24));     // mid glow
+  world.add(dustLayer(700,13,.16,20));    // bright bloom stars
+  // spherical halo of dim old stars
+  (()=>{const g=new THREE.BufferGeometry(),P=[],C=[];const col=new THREE.Color();
+    for(let i=0;i<1600;i++){const v=rndDir().multiplyScalar(520+Math.random()*1500);
+      P.push(v.x,v.y,v.z); col.setHSL(.08+Math.random()*.5,.2,.4+Math.random()*.3); C.push(col.r,col.g,col.b);}
+    g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+    g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+    scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:2.4,map:soft,vertexColors:true,transparent:true,opacity:.7,sizeAttenuation:true,depthWrite:false,blending:THREE.AdditiveBlending})));})();
+  // dark dust lanes (subtractive-feel: near-black soft sprites hugging the arms)
+  for(let i=0;i<40;i++){
+    const arm=(i%3), t=.15+Math.random()*.8, r=50+t*760, ang=arm*(Math.PI*2/3)+t*4.4+(Math.random()-.5)*.25;
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex('#05070F',1),transparent:true,opacity:.32,depthWrite:false}));
+    sp.position.set(Math.cos(ang)*r,(Math.random()-.5)*8,Math.sin(ang)*r);
+    sp.scale.set(120+Math.random()*160,40+Math.random()*50,1); world.add(sp);
+  }
+  // nebula clouds along the arms
+  const nebCols=['#4F6BFF','#9D7BFF','#FF7A59','#3ED9A4'];
+  for(let i=0;i<30;i++){
+    const arm=(i%3), t=.2+Math.random()*.75, r=60+t*720, ang=arm*(Math.PI*2/3)+t*4.4+(Math.random()-.5)*.4;
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(nebCols[i%4],.22),transparent:true,
+      opacity:.09+Math.random()*.09,blending:THREE.AdditiveBlending,depthWrite:false}));
+    sp.position.set(Math.cos(ang)*r,(Math.random()-.5)*26,Math.sin(ang)*r);
+    sp.scale.setScalar(200+Math.random()*300); world.add(sp);
+  }
+  // ☀️ ADITYA — galaxy ke kendra mein Surya (red-orange corona, pulsing)
+  window.sunLayers=[];
+  [['#FFF6E0',.85,120],['#FFD9A0',.6,210],['#FF9A5A',.42,340],['#FF5E3A',.26,520],['#C22E1F',.14,760]].forEach(([c,o,s])=>{
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(c,.7),transparent:true,opacity:o,blending:THREE.AdditiveBlending,depthWrite:false}));
+    sp.scale.setScalar(s); sp.userData.base=s; world.add(sp); window.sunLayers.push(sp);});
+  // naam ka sitara: "ADITYA" core ke upar
+  (()=>{const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');
+    x.font='700 64px "Space Grotesk",system-ui,sans-serif';x.textAlign='center';x.textBaseline='middle';
+    x.letterSpacing='18px';
+    x.shadowColor='#FF5E3A';x.shadowBlur=26;x.fillStyle='#FFE9CF';x.fillText('ADITYA',256,64);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,opacity:.9,depthWrite:false}));
+    sp.position.set(0,86,0); sp.scale.set(190,48,1); world.add(sp);})();
+  // sun ki roshni poore kendra pe
+  const sunLight=new THREE.PointLight(0xFF7A45,1.4,900); sunLight.position.set(0,0,0); world.add(sunLight);
+})();
+
+let meshes=[], lineSeg=null, lineGeo=null;
+const sphereGeo=new THREE.SphereGeometry(1,14,14);
+
+function colorFor(group){
+  if(!groups.has(group)) groups.set(group,{color:PALETTE[groups.size%PALETTE.length],on:true,count:0});
+  return groups.get(group).color;
+}
+
+function buildScene(){
+  meshes.forEach(m=>world.remove(m)); if(lineSeg)world.remove(lineSeg);
+  meshes=[]; groups.clear();
+  nodes.forEach(n=>{colorFor(n.group); groups.get(n.group).count++;});
+  const glowMaps={};
+  nodes.forEach(n=>{
+    const col=colorFor(n.group);
+    const mat=new THREE.MeshLambertMaterial({color:col,emissive:new THREE.Color(col).multiplyScalar(.35)});
+    const m=new THREE.Mesh(sphereGeo,mat);
+    const r=2.2+Math.min(6,Math.sqrt(n.size||1)*1.6+(n.deg||0)*.12);
+    m.scale.setScalar(r); m.position.copy(n.pos); m.userData=n; n.mesh=m;
+    glowMaps[col]=glowMaps[col]||glowTex(col,.6);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowMaps[col],transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false}));
+    sp.scale.setScalar(r*7); m.add(sp); n.glow=sp;
+    world.add(m); meshes.push(m);
+  });
+  lineGeo=new THREE.BufferGeometry();
+  const pos=new Float32Array(links.length*6);
+  lineGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  lineSeg=new THREE.LineSegments(lineGeo,new THREE.LineBasicMaterial({color:0x4F6BFF,transparent:true,opacity:.16}));
+  world.add(lineSeg);
+  syncLines(); buildLegend();
+  $('#nN').textContent=nodes.length; $('#nL').textContent=links.length;
+}
+function syncLines(){
+  const p=lineGeo.attributes.position.array; const byId=idMap();
+  links.forEach((l,i)=>{const a=byId.get(l.s).pos,b=byId.get(l.t).pos;
+    p[i*6]=a.x;p[i*6+1]=a.y;p[i*6+2]=a.z;p[i*6+3]=b.x;p[i*6+4]=b.y;p[i*6+5]=b.z;});
+  lineGeo.attributes.position.needsUpdate=true;
+}
+function idMap(){const m=new Map();nodes.forEach(n=>m.set(n.id,n));return m;}
+
+/* ---------- galaxy layout: har group = ek spiral arm, hubs core mein ---------- */
+function layout(iter,done){
+  const byId=idMap();
+  links.forEach(l=>{const a=byId.get(l.s),b=byId.get(l.t);a.deg=(a.deg||0)+1;b.deg=(b.deg||0)+1;});
+  const gList=[...new Set(nodes.map(n=>n.group))];
+  const armOf=new Map(gList.map((g,i)=>[g,i%3]));           // 3 arms, groups baante hue
+  const armSlot=new Map(gList.map((g,i)=>[g,(i/gList.length)]));
+  const maxDeg=Math.max(1,...nodes.map(n=>n.deg||0));
+  nodes.forEach((n,i)=>{
+    const hub=(n.deg||0)/maxDeg;                            // 1 = sabse bada hub
+    if(hub>.55){                                            // core bulge
+      const v=rndDir().multiplyScalar(20+Math.random()*70*(1-hub));
+      v.y*=.55; n.pos=v;
+    }else{                                                  // spiral arm
+      const arm=armOf.get(n.group);
+      const t=.12+ (armSlot.get(n.group)*.5 + Math.random()*.5)*.88; // group ka mohalla + jitter
+      const r=70+t*680*(1-hub*.5);
+      const ang=arm*(Math.PI*2/3)+t*4.4+(Math.random()-.5)*.34;
+      n.pos=new THREE.Vector3(Math.cos(ang)*r+(Math.random()-.5)*34,(Math.random()-.5)*(24-t*10),Math.sin(ang)*r+(Math.random()-.5)*34);
+    }
+  });
+  // halki si spring-relaxation: linked notes ek doosre ke paas sarakte hain (arms ke andar)
+  let i=0;
+  function step(){
+    for(let k=0;k<10&&i<iter;k++,i++){
+      links.forEach(l=>{const a=byId.get(l.s),b=byId.get(l.t);
+        const d=b.pos.clone().sub(a.pos),L=d.length();
+        if(L>90){const f=d.multiplyScalar(.006);a.pos.add(f);b.pos.sub(f);}});
+    }
+    if(i<iter){$('#ringSub').textContent='galaxy '+Math.round(i/iter*100)+'%';requestAnimationFrame(step);}
+    else done();
+  }
+  step();
+}
+
+/* ---------- legend / filter ---------- */
+function buildLegend(){
+  const box=$('#legRows'); box.innerHTML='';
+  [...groups.entries()].sort((a,b)=>b[1].count-a[1].count).forEach(([g,info])=>{
+    const row=document.createElement('div'); row.className='leg'+(info.on?'':' off');
+    row.innerHTML=`<span class="swatch" style="background:${info.color}"></span>${g}<span class="n">${info.count}</span>`;
+    row.onclick=()=>{info.on=!info.on;row.classList.toggle('off',!info.on);applyVisibility();};
+    box.appendChild(row);
+  });
+}
+function applyVisibility(){
+  nodes.forEach(n=>{n.mesh.visible=groups.get(n.group).on;});
+  lineSeg.visible=true; refreshFocus();
+}
+
+/* ---------- focus / inspector ---------- */
+function neighborsOf(id){
+  const s=new Set([id]);
+  links.forEach(l=>{if(l.s===id)s.add(l.t); if(l.t===id)s.add(l.s);});
+  return s;
+}
+function refreshFocus(){
+  if(!focusId){nodes.forEach(n=>{n.mesh.material.opacity=1;n.mesh.material.transparent=false;if(n.glow)n.glow.material.opacity=.55;});
+    if(lineSeg)lineSeg.material.opacity=.16;return;}
+  const nb=neighborsOf(focusId);
+  nodes.forEach(n=>{const on=nb.has(n.id);
+    n.mesh.material.transparent=true;n.mesh.material.opacity=on?1:.08;
+    if(n.glow)n.glow.material.opacity=on?.8:.04;});
+  lineSeg.material.opacity=.05;
+}
+function focusNode(n){
+  focusId=n?n.id:null; refreshFocus();
+  const box=$('#insBody');
+  if(!n){box.innerHTML='Kisi node pe click karo — connections jal uthenge.';return;}
+  const nb=[...neighborsOf(n.id)].filter(x=>x!==n.id).slice(0,14);
+  const meta=n.meta||{};
+  box.innerHTML=`<div class="t">${n.label}</div>
+    <div class="meta">${n.group.toUpperCase()} · ${ (n.deg||0)} connections${meta.modified?` · ${meta.modified}`:''}</div>
+    ${meta.path?`<div class="meta" style="margin-top:4px;word-break:break-all">${meta.path}</div>`:''}
+    <div class="links">${nb.map(id=>`<span class="lk" data-id="${id}">→ ${(idMap().get(id)||{label:id}).label}</span>`).join('')||'<span style="color:var(--dim)">koi link nahi</span>'}</div>`;
+  box.querySelectorAll('.lk').forEach(el=>el.onclick=()=>{const t=idMap().get(el.dataset.id);if(t){focusNode(t);flyTo(t);}});
+}
+function flyTo(n){ dist=Math.max(180,dist*0.6); } // zoom in; focus highlight does the rest
+
+/* ---------- camera: full 360° spherical orbit ---------- */
+let dragging=false,px=0,py=0,theta=0.6,phi=1.05,dist=760;
+canvas.addEventListener('pointerdown',e=>{dragging=true;px=e.clientX;py=e.clientY;});
+addEventListener('pointerup',()=>dragging=false);
+addEventListener('pointermove',e=>{
+  if(dragging){theta-=(e.clientX-px)*.005; phi-=(e.clientY-py)*.005;
+    phi=Math.max(.03,Math.min(Math.PI-.03,phi)); px=e.clientX;py=e.clientY;}
+  mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+});
+canvas.addEventListener('wheel',e=>{dist=Math.max(90,Math.min(2000,dist+e.deltaY*.7));},{passive:true});
+
+/* ---------- picking ---------- */
+const ray=new THREE.Raycaster(); const mouse=new THREE.Vector2(-2,-2);
+canvas.addEventListener('click',e=>{
+  ray.setFromCamera(mouse,camera);
+  const hit=ray.intersectObjects(meshes.filter(m=>m.visible))[0];
+  focusNode(hit?hit.object.userData:null);
+});
+addEventListener('keydown',e=>{
+  if(e.key==='/'&&document.activeElement!==$('#search')&&document.activeElement!==$('#chatInput')){e.preventDefault();$('#search').focus();}
+  if(e.key==='Escape'){focusNode(null);$('#search').value='';searchApply('');}
+});
+
+/* ---------- search ---------- */
+$('#search').addEventListener('input',e=>searchApply(e.target.value.trim().toLowerCase()));
+function searchApply(q){
+  if(!q){nodes.forEach(n=>{n.mesh.visible=groups.get(n.group).on;});refreshFocus();return;}
+  let first=null;
+  nodes.forEach(n=>{const ok=groups.get(n.group).on&&(n.label.toLowerCase().includes(q)||n.id.toLowerCase().includes(q));
+    n.mesh.visible=ok; if(ok&&!first)first=n;});
+  if(first){focusNode(first);flyTo(first);}
+}
+
+/* ---------- chat dock ---------- */
+function addMsg(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
+  $('#chatLog').appendChild(d);$('#chatLog').scrollTop=1e9;return d;}
+async function sendChat(){
+  const inp=$('#chatInput'); const q=inp.value.trim(); if(!q)return; inp.value='';
+  addMsg(q,'me');
+  const wait=addMsg('soch raha hoon…','sys');
+  try{
+    const r=await fetch(CHAT_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q})});
+    const j=await r.json(); wait.remove();
+    addMsg(j.reply||j.response||j.text||JSON.stringify(j).slice(0,400),'ai');
+  }catch(err){
+    wait.remove();
+    addMsg('brain_chat.py se connect nahi hua ('+CHAT_API+'). Terminal mein `python3 brain_chat.py` chalao, ya Claude Code se is dashboard ke liye /api/chat endpoint jodwa lo.','sys');
+  }
+}
+$('#sendBtn').onclick=sendChat;
+$('#chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+
+/* ---------- boot ---------- */
+function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';setTimeout(()=>el.style.display='none',5200);}
+function setRing(st,sub,err){$('#ringSt').textContent=st;$('#ringSt').className='st'+(err?' err':'');$('#ringSub').textContent=sub;}
+async function boot(){
+  let raw=null;
+  try{const r=await fetch(INDEX_URL,{cache:'no-store'}); if(r.ok)raw=await r.json();}catch(e){}
+  let d=raw?adapt(raw):{N:[],L:[]};
+  if(!d.N.length){d=demoData();setRing('DEMO MODE','brain_index.json nahi mila',true);
+    toast('Demo data chal raha hai — asli brain ke liye watcher.py chala ke isse vault folder se serve karo.');}
+  else setRing('INDEX LOADED', d.N.length+' notes zinda');
+  nodes=d.N; links=d.L;
+  layout(120,()=>{buildScene();
+    nodes.forEach(n=>{n.orb={r:Math.hypot(n.pos.x,n.pos.z),y:n.pos.y,a:Math.atan2(n.pos.z,n.pos.x)};});
+    if(raw)setRing('INDEX LOADED', nodes.length+' notes · '+links.length+' links');});
+}
+boot();
+
+/* ---------- render loop ---------- */
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+let t=0;
+(function tick(){
+  requestAnimationFrame(tick); t+=.005;
+  if(!dragging&&!RM&&!focusId) theta+=.0007;        // galaxy dheere ghoomti hai
+  camera.position.set(dist*Math.sin(phi)*Math.cos(theta), dist*Math.cos(phi), dist*Math.sin(phi)*Math.sin(theta));
+  camera.lookAt(0,0,0);
+  // ☀️ parikrama: har note ADITYA ke chakkar mein — andar tez, bahar dheere (Kepler)
+  if(nodes.length&&nodes[0].orb&&!RM&&!focusId){
+    nodes.forEach(n=>{
+      n.orb.a += 0.0011*(90/(n.orb.r+40));
+      n.pos.set(Math.cos(n.orb.a)*n.orb.r, n.orb.y, Math.sin(n.orb.a)*n.orb.r);
+      n.mesh.position.copy(n.pos);
+    });
+    if(lineGeo) syncLines();
+  }
+  if(window.sunLayers&&!RM){const p=1+Math.sin(t*2.2)*.05;
+    window.sunLayers.forEach((sp,i)=>sp.scale.setScalar(sp.userData.base*(1+Math.sin(t*2.2+i)*.05)));}
+  if(lineSeg&&nodes.length&&!RM){
+    const f=focusId&&idMap().get(focusId); if(f)f.mesh.scale.setScalar(f.mesh.scale.x*(1+Math.sin(t*6)*.004));
+  }
+  renderer.render(scene,camera);
+})();
+</script>
+</body>
+</html>
