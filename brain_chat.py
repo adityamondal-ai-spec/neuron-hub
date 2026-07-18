@@ -736,6 +736,16 @@ PLAY_RE   = re.compile(r"^(?:play|youtube|chalao|lagao)\b[:\-]?\s+(.+)$", re.I)
 OPEN_RE   = re.compile(r"^(?:open|kholo)\b[:\-]?\s+(\S+)$", re.I)
 SEARCH_RE = re.compile(r"^(?:search|dhundo)\b[:\-]?\s+(.+)$", re.I)
 
+# Action-shaped requests we deliberately do NOT support. Matched and refused
+# HERE, deterministically — never handed to the LLM, because a small local
+# model (qwen2.5:3b) does not reliably follow the honesty instruction in the
+# system prompt and can say "Sure thing!" to something it can't actually do.
+UNSUPPORTED_RE = re.compile(
+    r"^(?:send|email|mail|message|whatsapp|dm|call|phone|ring|post|tweet|"
+    r"book|order|buy|pay|transfer|delete|remove|reply|bhejo|bhej do|"
+    r"karo call|call karo)\b", re.I)
+HONEST_REFUSAL = "yeh main abhi nahi kar sakta — abhi sirf YouTube khol sakta hoon, koi site khol sakta hoon, ya web search kar sakta hoon."
+
 
 def _log_action(line: str) -> None:
     try:
@@ -791,6 +801,9 @@ def try_action(msg: str):
             _log_action(f'ACTION: opened Google search for "{query}"')
             return {"reply": f"Google search khol diya: {query} 🔎", "action": "google_search"}
         return None
+
+    if UNSUPPORTED_RE.match(msg):
+        return {"reply": HONEST_REFUSAL, "action": "refused"}
 
     return None
 
