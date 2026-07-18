@@ -17,11 +17,14 @@ Optional background: save the galaxy image as bg.png (or bg.mp4) in this folder.
 """
 import json
 import os
+import re
 import ssl
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 import urllib.error
+from datetime import datetime
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -157,7 +160,11 @@ def system_prompt() -> str:
             "Be PROACTIVE: you know who they are (ABOUT ME), you track their pending work "
             "(MY TASKS), and you push them toward their goals. When they ask what to do, "
             "prioritise from their tasks + goals and give ONE clear next action. "
-            "If you don't know something, say so plainly.")
+            "If you don't know something, say so plainly. "
+            "You can ONLY do actions the action layer executed (opening YouTube/a site/a "
+            "search — nothing else). If the user asks for anything you cannot actually "
+            "perform, say honestly 'yeh main abhi nahi kar sakta' — NEVER claim or roleplay "
+            "that you performed an action you didn't.")
     parts = [base]
     prof = _read_personal("PROFILE.md")
     if prof:
@@ -715,6 +722,79 @@ initBattery(); sizeCanvas(); loadNotes(); loadHistory(); initMode(); draw();
 </script></body></html>"""
 
 
+# ── action layer: whitelisted intents only, no arbitrary shell ──────────────
+BRAIN_MEMORY_MD = BASE / "brain_memory.md"
+
+# domain-only, e.g. "github.com" or "docs.github.com/foo" — rejects spaces,
+# shell metacharacters, "javascript:", "file:", or anything else not shaped
+# like a plain hostname(+path).
+_DOMAIN_RE = re.compile(
+    r"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}"
+    r"(/[a-zA-Z0-9._~\-/%]*)?$", re.I)
+
+PLAY_RE   = re.compile(r"^(?:play|youtube|chalao|lagao)\b[:\-]?\s+(.+)$", re.I)
+OPEN_RE   = re.compile(r"^(?:open|kholo)\b[:\-]?\s+(\S+)$", re.I)
+SEARCH_RE = re.compile(r"^(?:search|dhundo)\b[:\-]?\s+(.+)$", re.I)
+
+
+def _log_action(line: str) -> None:
+    try:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with BRAIN_MEMORY_MD.open("a", encoding="utf-8") as f:
+            f.write(f"- {ts} — {line}\n")
+    except Exception:
+        pass
+
+
+def _open_url(url: str) -> bool:
+    """Open a URL via macOS `open` — no shell, http(s) only, defense in depth
+    even though every caller here already builds the URL itself."""
+    if not (url.startswith("https://") or url.startswith("http://")):
+        return False
+    try:
+        subprocess.run(["open", url], check=True, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+def try_action(msg: str):
+    """Whitelist-only intent check, run BEFORE the message reaches the LLM.
+    Returns a reply dict if an action was executed, else None (falls through
+    to the normal chat pipeline)."""
+    msg = msg.strip()
+
+    m = PLAY_RE.match(msg)
+    if m:
+        query = m.group(1).strip()
+        url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
+        if _open_url(url):
+            _log_action(f'ACTION: opened YouTube search for "{query}"')
+            return {"reply": f"YouTube khol diya: {query} 🎵", "action": "youtube_search"}
+        return None
+
+    m = OPEN_RE.match(msg)
+    if m:
+        site = re.sub(r"^https?://", "", m.group(1).strip(), flags=re.I)
+        if _DOMAIN_RE.fullmatch(site):
+            url = "https://" + site
+            if _open_url(url):
+                _log_action(f"ACTION: opened {url}")
+                return {"reply": f"{site} khol diya.", "action": "open_site"}
+        return None
+
+    m = SEARCH_RE.match(msg)
+    if m:
+        query = m.group(1).strip()
+        url = "https://www.google.com/search?q=" + urllib.parse.quote(query)
+        if _open_url(url):
+            _log_action(f'ACTION: opened Google search for "{query}"')
+            return {"reply": f"Google search khol diya: {query} 🔎", "action": "google_search"}
+        return None
+
+    return None
+
+
 CORS_ORIGIN = "http://localhost:8080"  # dashboard.html's static server
 
 
@@ -778,11 +858,15 @@ class Handler(BaseHTTPRequestHandler):
             msg = (self._json_body().get("message") or "").strip()
             if not msg:
                 return self._send(400, json.dumps({"error": "empty"}))
-            cfg = load_cfg()
-            if cfg.get("prefer") == "opus" and cfg.get("anthropic_api_key"):
-                result = agent_respond(msg)   # Opus → acting agent
+            action = try_action(msg)   # whitelist-only, checked before the LLM
+            if action:
+                result = action
             else:
-                result = respond(msg)          # local → plain chat
+                cfg = load_cfg()
+                if cfg.get("prefer") == "opus" and cfg.get("anthropic_api_key"):
+                    result = agent_respond(msg)   # Opus → acting agent
+                else:
+                    result = respond(msg)          # local → plain chat
             if self.path == "/api/chat":
                 return self._send(200, json.dumps({"reply": result.get("reply", "")}))
             return self._send(200, json.dumps(result))
